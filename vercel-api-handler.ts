@@ -9,7 +9,7 @@ export default async function forwardToExpress(
     const { default: app } = await import('./server.ts');
     const requestUrl = new URL(req.url || '/', 'http://localhost');
 
-    if (routePath !== '/api' && (requestUrl.pathname === '/' || requestUrl.pathname === '/login')) {
+    if (routePath !== '/api') {
       requestUrl.pathname = routePath;
     } else if (!requestUrl.pathname.startsWith('/api/')) {
       requestUrl.pathname = `/api${requestUrl.pathname === '/' ? '' : requestUrl.pathname}`;
