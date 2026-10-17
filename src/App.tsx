@@ -342,14 +342,14 @@ export default function App() {
       )}
 
       {/* Mode Switcher Banner */}
-      <div className="bg-[#0B3B2C] text-white px-4 py-2.5 text-sm flex items-center justify-between border-b border-[#144f3d]">
+      <div className="bg-[#0B3B2C] text-white px-4 py-2.5 text-sm flex flex-col gap-3 border-b border-[#144f3d] sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <KobacLogo size="small" />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4">
           <button 
             onClick={() => setActivePortal('public')}
-            className={`px-3.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+            className={`whitespace-nowrap px-3.5 py-1 rounded-lg text-xs font-semibold transition-all ${
               activePortal === 'public' ? 'bg-[#F5A623] text-[#0B3B2C]' : 'text-gray-300 hover:text-white hover:bg-[#144f3d]'
             }`}
           >
@@ -357,7 +357,7 @@ export default function App() {
           </button>
           <button 
             onClick={() => setActivePortal('portal')}
-            className={`px-3.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+            className={`whitespace-nowrap px-3.5 py-1 rounded-lg text-xs font-semibold transition-all ${
               activePortal === 'portal' ? 'bg-[#F5A623] text-[#0B3B2C]' : 'text-gray-300 hover:text-white hover:bg-[#144f3d]'
             }`}
           >
