@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
+import app from '../../server.ts';
 
-export default async function handler(req: Request, res: Response) {
+export default function handler(req: Request, res: Response) {
   try {
-    const { default: app } = await import('../../server');
     const requestUrl = new URL(req.url || '/', 'http://localhost');
 
     if (requestUrl.pathname === '/' || requestUrl.pathname === '/login') {
