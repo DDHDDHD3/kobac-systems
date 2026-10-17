@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createHash, randomUUID } from 'crypto';
@@ -1974,6 +1973,7 @@ app.delete('/api/contact-submissions/:id', requireStaffSession, async (req, res)
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false }
     });
