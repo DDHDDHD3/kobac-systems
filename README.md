@@ -19,7 +19,7 @@ If `DATABASE_URL` is missing or still contains the example placeholders, the web
 
 ## Deploy to Vercel
 
-Import `DDHDDHD3/kobac-systems` as a Vercel project with the repository root as the project root. The included Vercel configuration builds the Vite frontend and routes API requests through a catch-all serverless function to the Express app.
+Import `DDHDDHD3/kobac-systems` as a Vercel project with the repository root as the project root. The included Vercel configuration builds the Vite frontend, routes API requests to serverless functions, and forwards them to the Express app.
 
 Set `DATABASE_URL` in the Vercel project's Environment Variables for Production and Preview deployments. Set `GEMINI_API_KEY` if the AI features should be enabled. Existing staff accounts keep their database passwords unless the optional `KOBAC_CEO_PASSWORD`, `KOBAC_CDSO_PASSWORD`, or `KOBAC_OPS_PASSWORD` variables are configured. Never put credentials in `VITE_` variables, commit them, or paste deployment tokens into chat. After changing environment variables, redeploy the project.
 

@@ -6,6 +6,9 @@
   "functions": {
     "api/[...path].ts": {
       "maxDuration": 60
+    },
+    "api/auth/login.ts": {
+      "maxDuration": 60
     }
   }
 }
