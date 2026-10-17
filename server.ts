@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { neon } from '@neondatabase/serverless';
@@ -11,15 +11,15 @@ import { and, eq, isNull } from 'drizzle-orm';
 import * as schema from './src/db/schema';
 import { 
   users, clients, documents, negotiations, projects, tasks, 
-  contracts, boardMembers, meetings, reminders, auditLogs, portfolio, companySettings, contactSubmissions, reports
+  contracts, boardMembers, meetings, reminders, auditLogs, portfolio, companySettings, contactSubmissions, reports, staffSessions
 } from './src/db/schema';
 
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 const STAFF_SESSION_COOKIE = 'kobac_staff_session';
-const staffSessions = new Map<string, { userId: string; expiresAt: number }>();
+const hashSessionToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
 const configuredConnectionString = process.env.DATABASE_URL?.trim();
 const hasValidDatabaseUrl = (value: string | undefined): value is string => {
@@ -315,6 +315,13 @@ async function initDatabase() {
         content TEXT NOT NULL DEFAULT '',
         created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
         updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS staff_sessions (
+        token_hash TEXT PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL
       );
     `;
     await sql`ALTER TABLE contact_submissions ADD COLUMN IF NOT EXISTS subject TEXT`;
@@ -672,7 +679,7 @@ async function initDatabase() {
   }
 }
 
-const app = express();
+export const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -735,18 +742,22 @@ app.use((req, res, next) => {
 const requireStaffSession: express.RequestHandler = async (req, res, next) => {
   const cookie = req.headers.cookie?.split(';').map(value => value.trim()).find(value => value.startsWith(`${STAFF_SESSION_COOKIE}=`));
   const sessionToken = cookie?.slice(STAFF_SESSION_COOKIE.length + 1);
-  const session = sessionToken ? staffSessions.get(sessionToken) : undefined;
-
-  if (!session || session.expiresAt <= Date.now()) {
-    if (sessionToken) staffSessions.delete(sessionToken);
+  if (!sessionToken) {
     res.status(401).json({ error: 'Staff sign-in is required to access inquiries.' });
     return;
   }
 
   try {
+    const tokenHash = hashSessionToken(sessionToken);
+    const [session] = await db.select().from(staffSessions).where(eq(staffSessions.tokenHash, tokenHash));
+    if (!session || session.expiresAt.getTime() <= Date.now()) {
+      if (session) await db.delete(staffSessions).where(eq(staffSessions.tokenHash, tokenHash));
+      res.status(401).json({ error: 'Staff sign-in is required to access inquiries.' });
+      return;
+    }
     const [staff] = await db.select({ id: users.id, name: users.name, active: users.active }).from(users).where(eq(users.id, session.userId));
     if (!staff?.active) {
-      staffSessions.delete(sessionToken!);
+      await db.delete(staffSessions).where(eq(staffSessions.tokenHash, tokenHash));
       res.status(401).json({ error: 'The staff account for this session is no longer available.' });
       return;
     }
@@ -1405,7 +1416,11 @@ app.post('/api/auth/login', async (req, res) => {
       ip: req.ip || "127.0.0.1"
     });
     const sessionToken = randomUUID();
-    staffSessions.set(sessionToken, { userId: user.id, expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
+    await db.insert(staffSessions).values({
+      tokenHash: hashSessionToken(sessionToken),
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000)
+    });
     res.setHeader('Set-Cookie', `${STAFF_SESSION_COOKIE}=${sessionToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
     const { password: _password, ...safeUser } = user;
     res.json({ success: true, user: safeUser });
@@ -1417,9 +1432,17 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/logout', (req, res) => {
   const cookie = req.headers.cookie?.split(';').map(value => value.trim()).find(value => value.startsWith(`${STAFF_SESSION_COOKIE}=`));
   const sessionToken = cookie?.slice(STAFF_SESSION_COOKIE.length + 1);
-  if (sessionToken) staffSessions.delete(sessionToken);
   res.setHeader('Set-Cookie', `${STAFF_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
-  res.json({ success: true });
+  if (!sessionToken) {
+    res.json({ success: true });
+    return;
+  }
+  void db.delete(staffSessions).where(eq(staffSessions.tokenHash, hashSessionToken(sessionToken)))
+    .then(() => res.json({ success: true }))
+    .catch(err => {
+      console.error('Signing out staff session failed:', err);
+      res.status(500).json({ error: 'Unable to sign out.' });
+    });
 });
 
 // Contact Submissions API Endpoints
@@ -1933,12 +1956,12 @@ app.delete('/api/contact-submissions/:id', requireStaffSession, async (req, res)
 });
 
 // Vite middleware integration in development
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
   const vite = await createViteServer({
     server: { middlewareMode: true, hmr: false }
   });
   app.use(vite.middlewares);
-} else {
+} else if (process.env.VERCEL !== '1') {
   app.use(express.static(path.resolve(__dirname, 'dist')));
   app.get('*', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
@@ -1951,6 +1974,10 @@ if (databaseConfigured) {
   console.error('DATABASE_URL is missing or contains example placeholders. Database-backed APIs are disabled.');
 }
 
-app.listen(Number(PORT), '0.0.0.0', () => {
-  console.log(`KOBAC SYSTEMS Enterprise Platform running at http://localhost:${PORT}`);
-});
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`KOBAC SYSTEMS Enterprise Platform running at http://localhost:${PORT}`);
+  });
+}
+
+export default app;

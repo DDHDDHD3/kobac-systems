@@ -17,6 +17,12 @@
 
 If `DATABASE_URL` is missing or still contains the example placeholders, the website shell still starts on port 3000, but database-backed API routes return HTTP 503 until a real connection string is configured. Check the configuration status at `http://localhost:3000/api/health`.
 
+## Deploy to Vercel
+
+Import `DDHDDHD3/kobac-systems` as a Vercel project with the repository root as the project root. The included `vercel.json` builds the Vite frontend and routes API requests to a serverless Express function.
+
+Set `DATABASE_URL` in the Vercel project's Environment Variables for Production and Preview deployments. Set `GEMINI_API_KEY` if the AI features should be enabled. Existing staff accounts keep their database passwords unless the optional `KOBAC_CEO_PASSWORD`, `KOBAC_CDSO_PASSWORD`, or `KOBAC_OPS_PASSWORD` variables are configured. Never put credentials in `VITE_` variables, commit them, or paste deployment tokens into chat. After changing environment variables, redeploy the project.
+
 ## Shared Application Data
 
 The public website loads published case studies, active public team profiles, and company contact/branding settings from the public bootstrap API. The Operations Portal restores its staff session and loads its CRM, project, document, contract, and audit data from a separate authenticated dashboard API. All other API routes require an active staff session; public endpoints are limited to website inquiries, project scoping, AI chat, and public website data.

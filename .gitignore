@@ -12,3 +12,4 @@ coverage/
 *.pfx
 *.keystore
 secrets.*
+.vercel/
