@@ -8,11 +8,11 @@ import dotenv from 'dotenv';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { and, eq, isNull } from 'drizzle-orm';
-import * as schema from './src/db/schema';
+import * as schema from './src/db/schema.ts';
 import { 
   users, clients, documents, negotiations, projects, tasks, 
   contracts, boardMembers, meetings, reminders, auditLogs, portfolio, companySettings, contactSubmissions, reports, staffSessions
-} from './src/db/schema';
+} from './src/db/schema.ts';
 
 dotenv.config();
 
