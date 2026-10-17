@@ -1,11 +1,11 @@
 {
+  "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
   "functions": {
-    "server.ts": {
-      "maxDuration": 60,
-      "includeFiles": "dist/**"
+    "api/[...path].ts": {
+      "maxDuration": 60
     }
   }
 }
