@@ -679,6 +679,12 @@ async function initDatabase() {
   }
 }
 
+let databaseInitialization: Promise<void> | undefined;
+const ensureDatabaseInitialized = () => {
+  databaseInitialization ??= initDatabase();
+  return databaseInitialization;
+};
+
 export const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -701,6 +707,17 @@ app.use('/api', (req, res, next) => {
   res.status(503).json({
     error: 'Database is not configured. Set DATABASE_URL in .env to enable this feature.'
   });
+});
+
+app.use('/api', async (_req, res, next) => {
+  try {
+    await ensureDatabaseInitialized();
+    next();
+  } catch {
+    res.status(503).json({
+      error: 'Database initialization failed. Check DATABASE_URL and database connectivity.'
+    });
+  }
 });
 
 const camelizeKey = (key: string) => key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
@@ -1955,28 +1972,34 @@ app.delete('/api/contact-submissions/:id', requireStaffSession, async (req, res)
   }
 });
 
-// Vite middleware integration in development
-if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
-  const vite = await createViteServer({
-    server: { middlewareMode: true, hmr: false }
-  });
-  app.use(vite.middlewares);
-} else if (process.env.VERCEL !== '1') {
-  app.use(express.static(path.resolve(__dirname, 'dist')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-  });
-}
+async function startServer() {
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true, hmr: false }
+    });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.resolve(__dirname, 'dist')));
+    app.get('*', (req, res) => {
+      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+    });
+  }
 
-if (databaseConfigured) {
-  await initDatabase();
-} else {
-  console.error('DATABASE_URL is missing or contains example placeholders. Database-backed APIs are disabled.');
+  if (databaseConfigured) {
+    await ensureDatabaseInitialized();
+  } else {
+    console.error('DATABASE_URL is missing or contains example placeholders. Database-backed APIs are disabled.');
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`KOBAC SYSTEMS Enterprise Platform running at http://localhost:${PORT}`);
+  });
 }
 
 if (process.env.VERCEL !== '1') {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`KOBAC SYSTEMS Enterprise Platform running at http://localhost:${PORT}`);
+  void startServer().catch(error => {
+    console.error('Failed to start KOBAC SYSTEMS:', error);
+    process.exitCode = 1;
   });
 }
 
