@@ -1196,15 +1196,21 @@ function LoginScreen({ onLoginSuccess, showNotification }: { onLoginSuccess: (us
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const responseText = await res.text();
+      let data: { success?: boolean; user?: User; error?: string };
+      try {
+        data = JSON.parse(responseText) as typeof data;
+      } catch {
+        throw new Error(`Login service returned a non-JSON response (HTTP ${res.status}). The deployment API route may not be configured.`);
+      }
+      if (res.ok && data.success && data.user) {
         showNotification(`Welcome back, ${data.user.name}!`);
         onLoginSuccess(data.user);
       } else {
         showNotification(data.error || 'Invalid credentials', 'error');
       }
     } catch (err) {
-      showNotification('Login connection error', 'error');
+      showNotification(err instanceof Error ? err.message : 'Login connection error', 'error');
     } finally {
       setLoading(false);
     }

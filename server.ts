@@ -1961,7 +1961,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
     server: { middlewareMode: true, hmr: false }
   });
   app.use(vite.middlewares);
-} else if (process.env.VERCEL !== '1') {
+} else {
   app.use(express.static(path.resolve(__dirname, 'dist')));
   app.get('*', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
