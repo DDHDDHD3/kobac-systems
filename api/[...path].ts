@@ -1,10 +1,6 @@
 import type { Request, Response } from 'express';
-import app from '../server.ts';
+import forwardToExpress from '../vercel-api-handler.ts';
 
 export default function handler(req: Request, res: Response) {
-  const requestUrl = req.url || '/';
-  if (!requestUrl.startsWith('/api')) {
-    req.url = `/api${requestUrl.startsWith('/') ? requestUrl : `/${requestUrl}`}`;
-  }
-  return app(req, res);
+  return forwardToExpress(req, res);
 }
