@@ -25,7 +25,7 @@ Set `DATABASE_URL` in the Vercel project's Environment Variables for Production 
 
 ## Shared Application Data
 
-The public website loads published case studies, active public team profiles, and company contact/branding settings from the public bootstrap API. The Operations Portal restores its staff session and loads its CRM, project, document, contract, and audit data from a separate authenticated dashboard API. All other API routes require an active staff session; public endpoints are limited to website inquiries, project scoping, AI chat, and public website data.
+Neon PostgreSQL is the source of truth for the Operations Portal and public website. The staff dashboard loads its CRM, projects, documents, contracts, reports, team, company settings, inquiries, and case studies from authenticated APIs. The public website reads published case studies, active team profiles, company contact details, and branding from the public bootstrap API. Staff can create, edit, publish, unpublish, and delete case studies in the dashboard's **Public Website Content** section; drafts are not returned by the public API. Saving dashboard changes refreshes both dashboard and public website data. Public endpoints are limited to website inquiries, project scoping, AI chat, and published website data.
 
 The public AI assistant uses the company settings and published case studies from the database as its context. Private dashboard records are not supplied to the public AI assistant. If Gemini is unavailable or not configured, the chat returns an explicit service error rather than a simulated AI answer.
 

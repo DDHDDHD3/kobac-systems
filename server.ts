@@ -1033,7 +1033,11 @@ app.put('/api/team/:id', async (req, res) => {
       ...updates,
       ...(password ? { password: password.trim() } : {})
     }).where(eq(users.id, req.params.id)).returning();
-    res.json(updated ? omitStaffPassword(updated) : null);
+    if (!updated) {
+      res.status(404).json({ error: 'Staff account not found.' });
+      return;
+    }
+    res.json(omitStaffPassword(updated));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1399,8 +1403,95 @@ app.get('/api/portfolio', async (req, res) => {
   try {
     const allPortfolio = await db.select().from(portfolio);
     res.json(allPortfolio);
-  } catch (err: any) {
-    res.json([]);
+  } catch (err) {
+    console.error('Loading portfolio case studies failed:', err);
+    res.status(500).json({ error: 'Unable to load portfolio case studies.' });
+  }
+});
+
+const parsePortfolioInput = (input: unknown): typeof portfolio.$inferInsert | null => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const data = input as Record<string, unknown>;
+  const requiredText = ['title', 'client', 'industry', 'category', 'problem', 'solution', 'completionDate'];
+  if (requiredText.some(key => typeof data[key] !== 'string' || !(data[key] as string).trim())) return null;
+  if (requiredText.some(key => (data[key] as string).length > 5000)) return null;
+  if ((data.title as string).length > 200 || (data.client as string).length > 200 ||
+      (data.industry as string).length > 160 || (data.category as string).length > 160) return null;
+  if (data.status !== 'Draft' && data.status !== 'Published') return null;
+  if (data.projectTitle !== undefined && data.projectTitle !== null && (typeof data.projectTitle !== 'string' || data.projectTitle.length > 240)) return null;
+  if (data.summary !== undefined && data.summary !== null && (typeof data.summary !== 'string' || data.summary.length > 5000)) return null;
+  if (data.businessImpact !== undefined && data.businessImpact !== null && (typeof data.businessImpact !== 'string' || data.businessImpact.length > 5000)) return null;
+  if (data.result !== undefined && data.result !== null && (typeof data.result !== 'string' || data.result.length > 5000)) return null;
+  const improvements = data.keyImprovements ?? [];
+  if (!Array.isArray(improvements) || improvements.length > 30 || !improvements.every(value => typeof value === 'string' && value.length <= 500)) return null;
+  const completionDate = data.completionDate as string;
+  const parsedCompletionDate = new Date(`${completionDate}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(completionDate) ||
+      Number.isNaN(parsedCompletionDate.getTime()) ||
+      parsedCompletionDate.toISOString().slice(0, 10) !== completionDate) return null;
+
+  return {
+    title: (data.title as string).trim(),
+    projectTitle: typeof data.projectTitle === 'string' ? data.projectTitle.trim() || null : null,
+    client: (data.client as string).trim(),
+    industry: (data.industry as string).trim(),
+    category: (data.category as string).trim(),
+    summary: typeof data.summary === 'string' ? data.summary.trim() || null : null,
+    problem: (data.problem as string).trim(),
+    solution: (data.solution as string).trim(),
+    keyImprovements: improvements.map(value => (value as string).trim()).filter(Boolean),
+    businessImpact: typeof data.businessImpact === 'string' ? data.businessImpact.trim() || null : null,
+    status: data.status,
+    completionDate,
+    result: typeof data.result === 'string' ? data.result.trim() || null : null
+  };
+};
+
+app.post('/api/portfolio', async (req, res) => {
+  const values = parsePortfolioInput(req.body);
+  if (!values) {
+    res.status(400).json({ error: 'Provide valid case study details and choose Draft or Published status.' });
+    return;
+  }
+  try {
+    const [created] = await db.insert(portfolio).values(values).returning();
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('Creating portfolio case study failed:', err);
+    res.status(500).json({ error: 'Unable to create portfolio case study.' });
+  }
+});
+
+app.put('/api/portfolio/:id', async (req, res) => {
+  const values = parsePortfolioInput(req.body);
+  if (!values) {
+    res.status(400).json({ error: 'Provide valid case study details and choose Draft or Published status.' });
+    return;
+  }
+  try {
+    const [updated] = await db.update(portfolio).set(values).where(eq(portfolio.id, req.params.id)).returning();
+    if (!updated) {
+      res.status(404).json({ error: 'Portfolio case study not found.' });
+      return;
+    }
+    res.json(updated);
+  } catch (err) {
+    console.error('Updating portfolio case study failed:', err);
+    res.status(500).json({ error: 'Unable to update portfolio case study.' });
+  }
+});
+
+app.delete('/api/portfolio/:id', async (req, res) => {
+  try {
+    const [deleted] = await db.delete(portfolio).where(eq(portfolio.id, req.params.id)).returning({ id: portfolio.id });
+    if (!deleted) {
+      res.status(404).json({ error: 'Portfolio case study not found.' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Deleting portfolio case study failed:', err);
+    res.status(500).json({ error: 'Unable to delete portfolio case study.' });
   }
 });
 

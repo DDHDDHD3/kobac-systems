@@ -187,9 +187,10 @@ interface PortfolioItem {
   solution?: string;
   key_improvements?: string[];
   business_impact?: string;
-  image_url: string;
   client: string;
   industry: string;
+  status: 'Published' | 'Draft';
+  completion_date: string;
   metrics?: string;
   result?: string;
 }
@@ -299,11 +300,9 @@ export default function App() {
   };
 
   const refreshAllData = async () => {
-    if (currentUser) {
-      await fetchAllData();
-    } else {
-      await loadPublicData();
-    }
+    const refreshes = [loadPublicData()];
+    if (currentUser) refreshes.push(fetchAllData().then(() => undefined));
+    await Promise.all(refreshes);
   };
 
   const handleLoginSuccess = async (user: User) => {
@@ -453,8 +452,21 @@ function PublicWebsite({ portfolio, companySettings, users, setActivePortal, onR
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setSubPage('home'); setSelectedCaseStudy(null); setMobileMenuOpen(false); }}>
-          <KobacLogo darkText={true} />
+        <div className="flex min-w-0 items-center gap-3 cursor-pointer" onClick={() => { setSubPage('home'); setSelectedCaseStudy(null); setMobileMenuOpen(false); }}>
+          {companySettings?.logo_url ? (
+            <img
+              src={companySettings.logo_url}
+              alt={companySettings.company_name || 'Company logo'}
+              className="h-10 max-w-40 object-contain"
+              onError={event => { event.currentTarget.src = '/kobac-logo-dark.png'; }}
+            />
+          ) : (
+            <KobacLogo showText={false} darkText />
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black text-[#0B3B2C]">{companySettings?.company_name || 'KOBAC SYSTEMS'}</p>
+            <p className="max-w-52 truncate text-[10px] text-gray-500">{companySettings?.tagline || 'Enterprise IT & Digital Transformation Solutions'}</p>
+          </div>
         </div>
         <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-gray-600">
           <button onClick={() => { setSubPage('home'); setSelectedCaseStudy(null); }} className={`hover:text-[#0B3B2C] transition-colors ${subPage === 'home' ? 'text-[#0B3B2C]' : ''}`}>Home</button>
@@ -909,8 +921,20 @@ function PublicWebsite({ portfolio, companySettings, users, setActivePortal, onR
       <footer className="bg-[#0B3B2C] text-white py-12 px-6 mt-20">
         <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="space-y-4">
-            <KobacLogo />
-            <p className="text-xs text-gray-300">Empowering enterprises with intelligent software systems and secure operations.</p>
+            <div className="flex items-center gap-3">
+              {companySettings?.logo_url ? (
+                <img
+                  src={companySettings.logo_url}
+                  alt={companySettings.company_name || 'Company logo'}
+                  className="h-10 max-w-40 object-contain"
+                  onError={event => { event.currentTarget.src = '/kobac-logo.png'; }}
+                />
+              ) : (
+                <KobacLogo showText={false} />
+              )}
+              <p className="text-sm font-bold text-white">{companySettings?.company_name || 'KOBAC SYSTEMS'}</p>
+            </div>
+            <p className="text-xs text-gray-300">{companySettings?.tagline || 'Empowering enterprises with intelligent software systems and secure operations.'}</p>
           </div>
           <div>
             <h4 className="font-bold text-sm text-[#F5A623] uppercase mb-3">Quick Links</h4>
@@ -1306,6 +1330,7 @@ function OperationsPortal({
     { id: 'tasks', label: 'Tasks & Operations' },
     { id: 'communications', label: 'Communications & Inquiries' },
     { id: 'reports', label: 'Reports & Presentations' },
+    { id: 'website', label: 'Public Website Content' },
     { id: 'board', label: 'Board Members & Governance' },
     { id: 'contracts', label: 'Contracts & Agreements' },
     { id: 'meetings', label: 'Meetings & Minutes' },
@@ -1422,6 +1447,7 @@ function OperationsPortal({
           {activeTab === 'tasks' && <TasksModule tasks={tasks} users={users} onRefresh={onRefresh} showNotification={showNotification} />}
           {activeTab === 'communications' && <CommunicationsModule users={users} onRefresh={onRefresh} setActiveTab={setActiveTab} showNotification={showNotification} />}
           {activeTab === 'reports' && <ReportsModule reports={reports} projects={projects} clients={clients} contracts={contracts} auditLogs={auditLogs} onRefresh={onRefresh} showNotification={showNotification} />}
+          {activeTab === 'website' && <PortfolioModule portfolio={portfolio} onRefresh={onRefresh} showNotification={showNotification} />}
           {activeTab === 'board' && <BoardModule boardMembers={boardMembers} onRefresh={onRefresh} showNotification={showNotification} />}
           {activeTab === 'contracts' && <ContractsModule contracts={contracts} clients={clients} onRefresh={onRefresh} showNotification={showNotification} />}
           {activeTab === 'meetings' && <MeetingsModule meetings={meetings} onRefresh={onRefresh} showNotification={showNotification} />}
@@ -2572,6 +2598,214 @@ function ReportsModule({ reports = [], projects, clients, contracts, auditLogs, 
   );
 }
 
+function PortfolioModule({ portfolio, onRefresh, showNotification }: {
+  portfolio: PortfolioItem[];
+  onRefresh: () => Promise<void>;
+  showNotification: (message: string, type?: 'success' | 'error') => void;
+}) {
+  type PortfolioDraft = Omit<PortfolioItem, 'id' | 'key_improvements' | 'status'> & {
+    key_improvements_text: string;
+    status: 'Draft' | 'Published';
+  };
+  const createEmptyDraft = (): PortfolioDraft => ({
+    title: '',
+    project_title: '',
+    category: '',
+    summary: '',
+    problem: '',
+    solution: '',
+    key_improvements_text: '',
+    business_impact: '',
+    client: '',
+    industry: '',
+    status: 'Draft',
+    completion_date: new Date().toISOString().slice(0, 10),
+    result: ''
+  });
+  const [editingCaseStudy, setEditingCaseStudy] = useState<PortfolioItem | null>(null);
+  const [draft, setDraft] = useState(createEmptyDraft);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const openCreate = () => {
+    setEditingCaseStudy(null);
+    setDraft(createEmptyDraft());
+    setModalOpen(true);
+  };
+
+  const openEdit = (item: PortfolioItem) => {
+    setEditingCaseStudy(item);
+    setDraft({
+      title: item.title,
+      project_title: item.project_title || '',
+      category: item.category,
+      summary: item.summary || '',
+      problem: item.problem || '',
+      solution: item.solution || '',
+      key_improvements_text: item.key_improvements?.join('\n') || '',
+      business_impact: item.business_impact || '',
+      client: item.client,
+      industry: item.industry,
+      status: item.status,
+      completion_date: item.completion_date,
+      result: item.result || ''
+    });
+    setModalOpen(true);
+  };
+
+  const saveCaseStudy = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const response = await fetch(editingCaseStudy ? `/api/portfolio/${editingCaseStudy.id}` : '/api/portfolio', {
+        method: editingCaseStudy ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: draft.title,
+          projectTitle: draft.project_title,
+          client: draft.client,
+          industry: draft.industry,
+          category: draft.category,
+          summary: draft.summary,
+          problem: draft.problem,
+          solution: draft.solution,
+          keyImprovements: draft.key_improvements_text.split('\n').map(value => value.trim()).filter(Boolean),
+          businessImpact: draft.business_impact,
+          status: draft.status,
+          completionDate: draft.completion_date,
+          result: draft.result
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to save case study.');
+      await onRefresh();
+      setModalOpen(false);
+      showNotification(draft.status === 'Published'
+        ? 'Case study saved and published to the public website.'
+        : 'Case study saved as a draft.');
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : 'Unable to save case study.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCaseStudy = async (item: PortfolioItem) => {
+    if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
+    try {
+      const response = await fetch(`/api/portfolio/${item.id}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to delete case study.');
+      await onRefresh();
+      showNotification('Case study deleted from the database and public website.');
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : 'Unable to delete case study.', 'error');
+    }
+  };
+
+  const updateDraft = <K extends keyof PortfolioDraft>(key: K, value: PortfolioDraft[K]) => {
+    setDraft(current => ({ ...current, [key]: value }));
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-[#0B3B2C]">Public Website Content</h1>
+          <p className="text-gray-600 text-sm">Manage case studies stored in the database. Published items appear on the public website; drafts remain private.</p>
+        </div>
+        <button onClick={openCreate} className="rounded-xl bg-[#0B3B2C] px-5 py-3 text-sm font-bold text-white hover:bg-[#144f3d]">Add Case Study</button>
+      </div>
+
+      {portfolio.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">No case studies are stored in the database yet.</div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {portfolio.map(item => (
+            <article key={item.id} className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="flex-1">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">{item.category}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${item.status === 'Published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{item.status}</span>
+                </div>
+                <h3 className="text-lg font-bold text-[#0B3B2C]">{item.title}</h3>
+                <p className="mt-2 text-xs text-gray-600">{item.client} · {item.industry}</p>
+                {item.summary && <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-gray-600">{item.summary}</p>}
+              </div>
+              <div className="flex gap-2 border-t border-gray-100 pt-4">
+                <button onClick={() => openEdit(item)} className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold text-gray-700">Edit</button>
+                <button onClick={() => void deleteCaseStudy(item)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700">Delete</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="case-study-editor-title">
+          <form onSubmit={saveCaseStudy} className="max-h-[90vh] w-full max-w-3xl space-y-4 overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 id="case-study-editor-title" className="text-xl font-black text-[#0B3B2C]">{editingCaseStudy ? 'Edit Case Study' : 'Add Case Study'}</h2>
+                <p className="mt-1 text-xs text-gray-500">All saved changes go to the shared database. Published case studies appear on the public website.</p>
+              </div>
+              <button type="button" onClick={() => setModalOpen(false)} className="rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-100" aria-label="Close case study editor">Close</button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="block text-xs font-bold text-gray-700">Case study title
+                <input required maxLength={200} value={draft.title} onChange={event => updateDraft('title', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block text-xs font-bold text-gray-700">Project title
+                <input maxLength={240} value={draft.project_title} onChange={event => updateDraft('project_title', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block text-xs font-bold text-gray-700">Client
+                <input required maxLength={200} value={draft.client} onChange={event => updateDraft('client', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block text-xs font-bold text-gray-700">Industry
+                <input required maxLength={160} value={draft.industry} onChange={event => updateDraft('industry', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block text-xs font-bold text-gray-700">Category
+                <input required maxLength={160} value={draft.category} onChange={event => updateDraft('category', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block text-xs font-bold text-gray-700">Completion date
+                <input required type="date" value={draft.completion_date} onChange={event => updateDraft('completion_date', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </label>
+            </div>
+            <label className="block text-xs font-bold text-gray-700">Summary
+              <textarea maxLength={5000} rows={2} value={draft.summary} onChange={event => updateDraft('summary', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-xs font-bold text-gray-700">Business challenge
+              <textarea required maxLength={5000} rows={3} value={draft.problem} onChange={event => updateDraft('problem', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-xs font-bold text-gray-700">Solution
+              <textarea required maxLength={5000} rows={3} value={draft.solution} onChange={event => updateDraft('solution', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-xs font-bold text-gray-700">Key improvements (one per line)
+              <textarea maxLength={5000} rows={3} value={draft.key_improvements_text} onChange={event => updateDraft('key_improvements_text', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-xs font-bold text-gray-700">Business impact
+              <textarea maxLength={5000} rows={2} value={draft.business_impact} onChange={event => updateDraft('business_impact', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-xs font-bold text-gray-700">Result
+              <textarea maxLength={5000} rows={2} value={draft.result} onChange={event => updateDraft('result', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            </label>
+            <label className="block text-xs font-bold text-gray-700">Publishing status
+              <select value={draft.status} onChange={event => updateDraft('status', event.target.value as PortfolioDraft['status'])} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                <option value="Draft">Draft (private)</option>
+                <option value="Published">Published (visible on public website)</option>
+              </select>
+            </label>
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setModalOpen(false)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700">Cancel</button>
+              <button type="submit" disabled={saving} className="rounded-xl bg-[#0B3B2C] px-5 py-2 text-sm font-bold text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save Case Study'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ==========================================
 // 9. BOARD MEMBERS & GOVERNANCE MODULE
 // ==========================================
@@ -3080,7 +3314,7 @@ function RemindersModule({ reminders, onRefresh, showNotification }: { reminders
 // 13. TEAM & PERMISSIONS MODULE
 // ==========================================
 
-function TeamModule({ users, onRefresh, showNotification }: { users: User[]; onRefresh: () => void; showNotification: (m: string, t?: any) => void }) {
+function TeamModule({ users, onRefresh, showNotification }: { users: User[]; onRefresh: () => Promise<void>; showNotification: (m: string, t?: any) => void }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
@@ -3115,11 +3349,13 @@ function TeamModule({ users, onRefresh, showNotification }: { users: User[]; onR
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this team member?')) return;
     try {
-      await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to delete team member.');
       showNotification('Team member deleted successfully');
-      onRefresh();
-    } catch (err) {
-      showNotification('Failed to delete team member', 'error');
+      await onRefresh();
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : 'Failed to delete team member.', 'error');
     }
   };
 
@@ -3138,13 +3374,13 @@ function TeamModule({ users, onRefresh, showNotification }: { users: User[]; onR
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingUser && !password ? userFields : { ...userFields, password })
       });
-      if (res.ok) {
-        showNotification(editingUser ? 'Team member updated successfully' : 'Team member created successfully');
-        setModalOpen(false);
-        onRefresh();
-      }
-    } catch (err) {
-      showNotification('Operation failed', 'error');
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Unable to save team member.');
+      showNotification(editingUser ? 'Team member updated successfully' : 'Team member created successfully');
+      setModalOpen(false);
+      await onRefresh();
+    } catch (error) {
+      showNotification(error instanceof Error ? error.message : 'Unable to save team member.', 'error');
     }
   };
 
@@ -3317,7 +3553,7 @@ function AuditLogsModule({ auditLogs }: { auditLogs: AuditLog[] }) {
 // 15. COMPANY SETTINGS MODULE
 // ==========================================
 
-function SettingsModule({ companySettings, onRefresh, showNotification }: { companySettings: CompanySettings | null; onRefresh: () => void; showNotification: (m: string, t?: any) => void }) {
+function SettingsModule({ companySettings, onRefresh, showNotification }: { companySettings: CompanySettings | null; onRefresh: () => Promise<void>; showNotification: (m: string, t?: any) => void }) {
   const [formData, setFormData] = useState({
     company_name: companySettings?.company_name || 'Kobac Systems Inc.',
     tagline: companySettings?.tagline || 'Enterprise Digital Transformation',
@@ -3361,7 +3597,7 @@ function SettingsModule({ companySettings, onRefresh, showNotification }: { comp
       });
       if (res.ok) {
         showNotification('Company settings updated successfully');
-        onRefresh();
+        await onRefresh();
       } else {
         const data = await res.json();
         throw new Error(data.error || 'Failed to update company settings.');
