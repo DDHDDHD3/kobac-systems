@@ -1595,7 +1595,7 @@ app.post('/api/ai/scope', async (req, res) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: `You are a business systems analyst at KOBAC SYSTEMS, a Mogadishu-based IT and digital solutions company. Propose a practical solution for the prospective client using their actual requirements below.
 
 Selected service: ${solutionType}
@@ -1702,7 +1702,7 @@ Customer message:
 Assistant:`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt
     });
 
